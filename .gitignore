@@ -52,6 +52,8 @@ _darcs
 /projects/*/datasets
 /models
 /snippet
+/demo_video/*
+!/demo_video/*.*
 
 # demo videos
 *.zip
