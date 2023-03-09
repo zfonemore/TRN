@@ -11,7 +11,11 @@ from .config import add_minvis_config
 
 # models
 from .video_maskformer_model import VideoMaskFormer_frame
+from .tarvis_video_model import VideoMaskFormer_frame_tarvis
+from .mem_video_model import VideoMaskFormer_frame_mem
 from .video_mask2former_transformer_decoder import VideoMultiScaleMaskedTransformerDecoder_frame
+from .tarvis_video_mask2former_transformer_decoder import VideoMultiScaleMaskedTransformerDecoder_frame_tarvis
+from .mem_video_mask2former_transformer_decoder import VideoMultiScaleMaskedTransformerDecoder_frame_mem
 
 # video
 from .data_video import (
