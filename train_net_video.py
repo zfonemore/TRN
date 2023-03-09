@@ -18,6 +18,9 @@ try:
 except:
     pass
 
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
 import copy
 import itertools
 import logging

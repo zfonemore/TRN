@@ -75,6 +75,10 @@ class VideoMultiScaleMaskedTransformerDecoder_frame_mem(VideoMultiScaleMaskedTra
                             dropout=0.0,
                             normalize_before=pre_norm,
                         )
+        '''
+
+        # learnable query p.e.
+        self.mem_query_embed = nn.Embedding(num_queries, 2 * hidden_dim)
 
         self.pre_attn = SelfAttentionLayer(
                     d_model=hidden_dim,
@@ -82,7 +86,6 @@ class VideoMultiScaleMaskedTransformerDecoder_frame_mem(VideoMultiScaleMaskedTra
                     dropout=0.0,
                     normalize_before=pre_norm,
                 )
-        '''
 
     def forward(self, x, mask_features, mask = None):
         # x is a list of multi-scale feature
@@ -130,6 +133,8 @@ class VideoMultiScaleMaskedTransformerDecoder_frame_mem(VideoMultiScaleMaskedTra
         query_embed = self.query_embed.weight.unsqueeze(1).repeat(1, bs, 1)
         output = self.query_feat.weight.unsqueeze(1).repeat(1, bs, 1)
 
+        mem_query_embed = self.mem_query_embed.weight.view(100, 2, c)
+
         pre_memory = None
         if pre_memory is not None:
             output = self.pre_attn(
@@ -169,13 +174,12 @@ class VideoMultiScaleMaskedTransformerDecoder_frame_mem(VideoMultiScaleMaskedTra
                 output
             )
 
-            '''
-            output = self.pre_attn(
-                output.transpose(0, 1), tgt_mask=None,
-                tgt_key_padding_mask=None,
-                query_pos=query_embed.transpose(0,1)
-            ).transpose(0, 1)
-            '''
+            for j in range(output.shape[1]-1):
+                output[:, j:j+2] = self.pre_attn(
+                        output[:, j:j+2].transpose(0, 1), tgt_mask=None,
+                    tgt_key_padding_mask=None,
+                    query_pos=mem_query_embed.transpose(0,1)
+                ).transpose(0, 1)
 
             outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[(i + 1) % self.num_feature_levels])
             predictions_class.append(outputs_class)
