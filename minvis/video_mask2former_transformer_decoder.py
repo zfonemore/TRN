@@ -41,7 +41,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         num_frames,
     ):
         super().__init__(
-            in_channels=in_channels, 
+            in_channels=in_channels,
             mask_classification=mask_classification,
             num_classes=num_classes,
             hidden_dim=hidden_dim,
@@ -81,46 +81,64 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         _, bs, _ = src[0].shape
 
         # QxNxC
-        query_embed = self.query_embed.weight.unsqueeze(1).repeat(1, bs, 1)
-        output = self.query_feat.weight.unsqueeze(1).repeat(1, bs, 1)
+        query_embed = self.query_embed.weight.unsqueeze(1)#.repeat(1, bs, 1)
+        output = self.query_feat.weight.unsqueeze(1)#.repeat(1, bs, 1)
 
         predictions_class = []
         predictions_mask = []
+        for i in range(self.num_layers+1):
+            predictions_class.append([])
+            predictions_mask.append([])
 
-        # prediction heads on learnable query features
-        outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[0])
-        predictions_class.append(outputs_class)
-        predictions_mask.append(outputs_mask)
+        pred_embds = []
+        for l in range(bs):
+            index = slice(l, l+1)
 
-        for i in range(self.num_layers):
-            level_index = i % self.num_feature_levels
-            attn_mask[torch.where(attn_mask.sum(-1) == attn_mask.shape[-1])] = False
-            # attention: cross-attention first
-            output = self.transformer_cross_attention_layers[i](
-                output, src[level_index],
-                memory_mask=attn_mask,
-                memory_key_padding_mask=None,  # here we do not apply masking on padded region
-                pos=pos[level_index], query_pos=query_embed
-            )
+            # prediction heads on learnable query features
+            outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features[index], attn_mask_target_size=size_list[0])
 
-            output = self.transformer_self_attention_layers[i](
-                output, tgt_mask=None,
-                tgt_key_padding_mask=None,
-                query_pos=query_embed
-            )
-            
-            # FFN
-            output = self.transformer_ffn_layers[i](
-                output
-            )
 
-            outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[(i + 1) % self.num_feature_levels])
-            predictions_class.append(outputs_class)
-            predictions_mask.append(outputs_mask)
+            if l % 2 == 0:
+                output = self.query_feat.weight.unsqueeze(1)#.repeat(1, bs, 1)
+
+            predictions_class[0].append(outputs_class)
+            predictions_mask[0].append(outputs_mask)
+
+            for i in range(self.num_layers):
+                level_index = i % self.num_feature_levels
+                if l % 2 == 0:
+                    attn_mask[torch.where(attn_mask.sum(-1) == attn_mask.shape[-1])] = False
+                    # attention: cross-attention first
+                    output = self.transformer_cross_attention_layers[i](
+                        output, src[level_index][:, index],
+                        memory_mask=attn_mask,
+                        memory_key_padding_mask=None,  # here we do not apply masking on padded region
+                        pos=pos[level_index][:, index], query_pos=query_embed
+                    )
+
+                    output = self.transformer_self_attention_layers[i](
+                        output, tgt_mask=None,
+                        tgt_key_padding_mask=None,
+                        query_pos=query_embed
+                    )
+
+                    # FFN
+                    output = self.transformer_ffn_layers[i](
+                        output
+                    )
+
+                outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features[index], attn_mask_target_size=size_list[(i + 1) % self.num_feature_levels])
+                predictions_class[i+1].append(outputs_class)
+                predictions_mask[i+1].append(outputs_mask)
+            pred_embds.append(output.clone())
+
+        for i in range(self.num_layers+1):
+            predictions_class[i] = torch.cat(predictions_class[i])
+            predictions_mask[i] = torch.cat(predictions_mask[i])
 
         assert len(predictions_class) == self.num_layers + 1
 
-        # expand BT to B, T  
+        # expand BT to B, T
         bt = predictions_mask[-1].shape[0]
         bs = bt // self.num_frames if self.training else 1
         t = bt // bs
@@ -130,7 +148,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         for i in range(len(predictions_class)):
             predictions_class[i] = einops.rearrange(predictions_class[i], '(b t) q c -> b t q c', t=t)
 
-        pred_embds = self.decoder_norm(output)
+        pred_embds = self.decoder_norm(torch.cat(pred_embds, dim=1))
         pred_embds = einops.rearrange(pred_embds, 'q (b t) c -> b c t q', t=t)
 
         out = {
@@ -141,7 +159,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
             ),
             'pred_embds': pred_embds,
         }
-        
+
         return out
 
     def forward_prediction_heads(self, output, mask_features, attn_mask_target_size):
@@ -149,6 +167,11 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         decoder_output = decoder_output.transpose(0, 1)
         outputs_class = self.class_embed(decoder_output)
         mask_embed = self.mask_embed(decoder_output)
+
+        temp_test = False
+        if temp_test:
+            mask_embed[1:] = mask_embed[:-1].clone()
+
         outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed, mask_features)
 
         # NOTE: prediction is of higher-resolution
