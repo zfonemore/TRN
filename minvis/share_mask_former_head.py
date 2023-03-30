@@ -11,12 +11,12 @@ from detectron2.config import configurable
 from detectron2.layers import Conv2d, ShapeSpec, get_norm
 from detectron2.modeling import SEM_SEG_HEADS_REGISTRY
 
-from ..transformer_decoder.maskformer_transformer_decoder import build_transformer_decoder
-from ..pixel_decoder.fpn import build_pixel_decoder
+from mask2former.modeling.transformer_decoder.maskformer_transformer_decoder import build_transformer_decoder
+from mask2former.modeling.pixel_decoder.fpn import build_pixel_decoder
 
 
 @SEM_SEG_HEADS_REGISTRY.register()
-class MaskFormerHead(nn.Module):
+class ShareMaskFormerHead(nn.Module):
 
     _version = 2
 
@@ -112,29 +112,13 @@ class MaskFormerHead(nn.Module):
             ),
         }
 
-    def forward(self, features, mask=None, pre_mem=None):
-        return self.layers(features, mask, pre_mem)
+    def forward(self, features, mask=None, pred_patches=None):
+        return self.layers(features, mask, pred_patches)
 
-    def layers(self, features, mask=None, pre_mem=None):
-        mask_features, transformer_encoder_features, multi_scale_features = self.pixel_decoder.forward_features(features)
+    def layers(self, features, mask=None, pred_patches=None):
+        mask_features, transformer_encoder_features, multi_scale_features, key_frame = self.pixel_decoder.forward_features(features, pred_patches)
         if self.transformer_in_feature == "multi_scale_pixel_decoder":
-            TIME = False
-            #TIME = True
-            if TIME:
-                import torch
-                import time
-
-                torch.cuda.synchronize()
-                st = time.time()
-
-            predictions = self.predictor(multi_scale_features, mask_features, mask)
-
-            if TIME:
-                torch.cuda.synchronize()
-                ed = time.time()
-
-                print('decoder time:', (ed - st) * 1000)
-
+            predictions = self.predictor(multi_scale_features, mask_features, mask, key_frame, pred_patches)
         else:
             if self.transformer_in_feature == "transformer_encoder":
                 assert (

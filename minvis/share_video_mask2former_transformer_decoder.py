@@ -18,10 +18,9 @@ from mask2former.modeling.transformer_decoder.position_encoding import PositionE
 from mask2former_video.modeling.transformer_decoder.video_mask2former_transformer_decoder import VideoMultiScaleMaskedTransformerDecoder
 import einops
 
-gap = 2
 
 @TRANSFORMER_DECODER_REGISTRY.register()
-class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransformerDecoder):
+class ShareVideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransformerDecoder):
 
     @configurable
     def __init__(
@@ -60,7 +59,8 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         N_steps = hidden_dim // 2
         self.pe_layer = PositionEmbeddingSine(N_steps, normalize=True)
 
-    def forward(self, x, mask_features, mask = None):
+
+    def forward(self, x, mask_features, mask = None, key_frame = None, pred_patches = None):
         # x is a list of multi-scale feature
         assert len(x) == self.num_feature_levels
         src = []
@@ -88,10 +88,32 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         predictions_class = []
         predictions_mask = []
 
+        h, w = mask_features.shape[-2:]
+
+        import time
+        torch.cuda.synchronize()
+        st = time.time()
+
+        mask_prototype = mask_features.new_ones((bs, self.num_queries, 16, h, w), dtype=torch.half) * (-100)
+
+        torch.cuda.synchronize()
+        ed = time.time()
+
+        print('mask prototype time:', (ed - st))
+
+        torch.cuda.synchronize()
+        st = time.time()
         # prediction heads on learnable query features
-        outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[0])
+        outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[0], key_frame=key_frame, is_last=False, pred_patches=pred_patches, outputs_mask_prototype=mask_prototype)
+
+        torch.cuda.synchronize()
+        ed = time.time()
+
+        print('mask generate time:', (ed - st))
+
         predictions_class.append(outputs_class)
         predictions_mask.append(outputs_mask)
+
 
         for i in range(self.num_layers):
             level_index = i % self.num_feature_levels
@@ -115,7 +137,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
                 output
             )
 
-            outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[(i + 1) % self.num_feature_levels], is_last=(i == (self.num_layers - 1)))
+            outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[(i + 1) % self.num_feature_levels], key_frame=key_frame, is_last=(i == (self.num_layers - 1)), pred_patches=pred_patches,  outputs_mask_prototype=mask_prototype)
             predictions_class.append(outputs_class)
             predictions_mask.append(outputs_mask)
 
@@ -125,35 +147,22 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         bt = predictions_mask[-1].shape[0]
         bs = bt // self.num_frames if self.training else 1
         t = bt // bs
-
-        '''
-        for i in range(len(predictions_mask)):
-            predictions_mask[i] = einops.rearrange(predictions_mask[i], '(b t) q h w -> b q t h w', t=t)
-        for i in range(len(predictions_class)):
-            predictions_class[i] = einops.rearrange(predictions_class[i], '(b t) q c -> b t q c', t=t)
-
-        pred_embds = self.decoder_norm(output)
-        pred_embds = einops.rearrange(pred_embds, 'q (b t) c -> b c t q', t=t)
-        '''
-
         if self.training:
             for i in range(len(predictions_mask)):
                 predictions_mask[i] = einops.rearrange(predictions_mask[i], '(b t) q h w -> b q t h w', t=t)
-
-            t = len(predictions_class[-1])
-            for i in range(len(predictions_class)):
-                predictions_class[i] = einops.rearrange(predictions_class[i], '(b t) q c -> b t q c', t=t)
         else:
             predictions_mask[-1] = einops.rearrange(predictions_mask[-1], '(b t) q h w -> b q t h w', t=t)
 
-            t = len(predictions_class[-1])
-            #predictions_class[-1] = torch.repeat_interleave(predictions_class[-1], gap, dim=0)[:t]
+        if self.training:
+            for i in range(len(predictions_class)):
+                predictions_class[i] = einops.rearrange(predictions_class[i], '(b t) q c -> b t q c', t=t)
+        else:
+            #predictions_class[-1] = torch.repeat_interleave(predictions_class[-1], 2, dim=0)[:t]
             predictions_class[-1] = einops.rearrange(predictions_class[-1], '(b t) q c -> b t q c', t=t)
 
         pred_embds = self.decoder_norm(output)
-        #pred_embds = torch.repeat_interleave(pred_embds, gap, dim=1)[:, :t]
+        #pred_embds = torch.repeat_interleave(pred_embds, 2, dim=1)[:, :t]
         pred_embds = einops.rearrange(pred_embds, 'q (b t) c -> b c t q', t=t)
-
 
         out = {
             'pred_logits': predictions_class[-1],
@@ -166,20 +175,38 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
 
         return out
 
-    def forward_prediction_heads(self, output, mask_features, attn_mask_target_size, is_last=False):
+    def forward_prediction_heads(self, output, mask_features, attn_mask_target_size, key_frame=None, is_last=False, pred_patches=None, outputs_mask_prototype=None):
         decoder_output = self.decoder_norm(output)
         decoder_output = decoder_output.transpose(0, 1)
         outputs_class = self.class_embed(decoder_output)
         mask_embed = self.mask_embed(decoder_output)
 
-        bs = len(mask_features)
-        key_frame = torch.arange(0, bs, gap)
+        h, w = mask_features.shape[-2:]
 
         if not is_last:
-            outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed, mask_features[key_frame])
+            '''
+            for f in range(len(mask_embed)):
+                if f == 0:
+                    index = slice(0, pred_patches[0].sum())
+                else:
+                    index = slice(pred_patches[:f].sum(), pred_patches[:(f+1)].sum())
+            '''
+            outputs_mask = torch.einsum("qc,cphw->qphw", mask_embed[0], mask_features.transpose(0, 1))
+            outputs_mask_prototype[0, :, pred_patches[0]] = outputs_mask
+            outputs_mask = einops.rearrange(outputs_mask_prototype, 'b q (h1 w1) h w -> b q (h1 h) (w1 w)', h1=4, w1=4)
         else:
-            share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
-            outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed[share_index], mask_features)
+            '''
+            for f in range(len(mask_embed)):
+                if f == 0:
+                    index = slice(0, pred_patches[0].sum())
+                else:
+                    index = slice(pred_patches[:f].sum(), pred_patches[:(f+1)].sum())
+                outputs_mask = torch.einsum("qc,cphw->qphw", mask_embed[f], mask_features[index].transpose(0, 1))
+                outputs_mask_prototype[f, :, pred_patches[f]] = outputs_mask
+            '''
+            outputs_mask = torch.einsum("qc,cphw->qphw", mask_embed[0], mask_features.transpose(0, 1))
+            outputs_mask_prototype[0, :, pred_patches[0]] = outputs_mask
+            outputs_mask = einops.rearrange(outputs_mask_prototype, 'b q (h1 w1) h w -> b q (h1 h) (w1 w)', h1=4, w1=4)
 
         # NOTE: prediction is of higher-resolution
         # [B, Q, H, W] -> [B, Q, H*W] -> [B, h, Q, H*W] -> [B*h, Q, HW]

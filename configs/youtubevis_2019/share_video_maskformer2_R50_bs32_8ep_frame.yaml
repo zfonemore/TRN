@@ -1,9 +1,9 @@
 _BASE_: Base-YouTubeVIS-VideoInstanceSegmentation.yaml
 MODEL:
   WEIGHTS: "model_final_3c8ec9.pkl"
-  META_ARCHITECTURE: "VideoMaskFormer_frame"
+  META_ARCHITECTURE: "ShareVideoMaskFormer_frame"
   SEM_SEG_HEAD:
-    NAME: "MaskFormerHead"
+    NAME: "ShareMaskFormerHead"
     IGNORE_VALUE: 255
     NUM_CLASSES: 40
     LOSS_WEIGHT: 1.0
@@ -17,7 +17,7 @@ MODEL:
     COMMON_STRIDE: 4
     TRANSFORMER_ENC_LAYERS: 6
   MASK_FORMER:
-    TRANSFORMER_DECODER_NAME: "VideoMultiScaleMaskedTransformerDecoder_frame"
+    TRANSFORMER_DECODER_NAME: "ShareVideoMultiScaleMaskedTransformerDecoder_frame"
     TRANSFORMER_IN_FEATURE: "multi_scale_pixel_decoder"
     DEEP_SUPERVISION: True
     NO_OBJECT_WEIGHT: 0.1

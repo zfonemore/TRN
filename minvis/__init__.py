@@ -17,6 +17,9 @@ from .video_mask2former_transformer_decoder import VideoMultiScaleMaskedTransfor
 from .tarvis_video_mask2former_transformer_decoder import VideoMultiScaleMaskedTransformerDecoder_frame_tarvis
 from .mem_video_mask2former_transformer_decoder import VideoMultiScaleMaskedTransformerDecoder_frame_mem
 from .share_mask_fpn import MSSharePixelDecoder
+from .share_mask_former_head import ShareMaskFormerHead
+from .share_video_maskformer_model import ShareVideoMaskFormer_frame
+from .share_video_mask2former_transformer_decoder import ShareVideoMultiScaleMaskedTransformerDecoder_frame
 
 # video
 from .data_video import (

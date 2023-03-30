@@ -1,4 +1,5 @@
-# Copyright (c) Facebook, Inc. and its affiliates.  import logging
+# Copyright (c) Facebook, Inc. and its affiliates.
+import logging
 import numpy as np
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -95,7 +96,6 @@ class MSSharePixelDecoder(nn.Module):
         N_steps = conv_dim // 2
         self.pe_layer = PositionEmbeddingSine(N_steps, normalize=True)
 
-        '''
         self.mask_dim = mask_dim
         # use 1x1 conv instead
         self.mask_features = Conv2d(
@@ -106,7 +106,6 @@ class MSSharePixelDecoder(nn.Module):
             padding=0,
         )
         weight_init.c2_xavier_fill(self.mask_features)
-        '''
 
         self.maskformer_num_feature_levels = 3  # always use 3 scales
         self.common_stride = common_stride
@@ -148,27 +147,6 @@ class MSSharePixelDecoder(nn.Module):
         self.lateral_convs = lateral_convs[::-1]
         self.output_convs = output_convs[::-1]
 
-        '''
-        share_mask_branch = []
-        for idx in range(self.maskformer_num_feature_levels):
-            share_norm = get_norm(norm, mask_dim)
-            share_mask_conv = Conv2d(
-                conv_dim,
-                mask_dim,
-                kernel_size=3,
-                stride=2,
-                padding=1,
-                norm=share_norm,
-                activation=F.relu,
-            )
-            weight_init.c2_xavier_fill(share_mask_conv)
-
-            self.add_module("share_{}".format(idx + 1), share_mask_conv)
-            share_mask_branch.append(share_mask_conv)
-
-        self.share_mask_branch = share_mask_branch
-        '''
-
 
     @classmethod
     def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec]):
@@ -191,7 +169,7 @@ class MSSharePixelDecoder(nn.Module):
         return ret
 
     @autocast(enabled=False)
-    def forward_features(self, features):
+    def forward_features(self, features, pred_patches):
         srcs = []
         pos = []
         # Reverse feature maps into top-down order (from low to high resolution)
@@ -202,6 +180,9 @@ class MSSharePixelDecoder(nn.Module):
 
         y, spatial_shapes, level_start_index = self.transformer(srcs, pos)
         bs = y.shape[0]
+
+        gap = 1
+        key_frame = torch.arange(0, bs, gap)
 
         split_size_or_sections = [None] * self.transformer_num_feature_levels
         for i in range(self.transformer_num_feature_levels):
@@ -229,24 +210,42 @@ class MSSharePixelDecoder(nn.Module):
             y = output_conv(y)
             out.append(y)
 
+        import time
+
+        torch.cuda.synchronize()
+        st = time.time()
+
+        import einops
+        patch_mask_features = einops.rearrange(out[-1], 'b c (h1 h) (w1 w) -> b (h1 w1) c h w', h1=4, w1=4)
+
+        patch_mask_features = patch_mask_features[pred_patches]
+
+        torch.cuda.synchronize()
+        ed = time.time()
+
+        print('mask features index time:', (ed - st) * 1000)
+
+
+        import time
+
+        torch.cuda.synchronize()
+        st = time.time()
+
+
+        mask_features = self.mask_features(patch_mask_features)
+
+        torch.cuda.synchronize()
+        ed = time.time()
+
+        print('mask features time:', (ed - st) * 1000)
+
+        print('patch num:', patch_mask_features.shape)
+        import pdb
+        pdb.set_trace()
+
         for o in out:
             if num_cur_levels < self.maskformer_num_feature_levels:
-                multi_scale_features.append(o)
+                multi_scale_features.append(o[key_frame])
                 num_cur_levels += 1
 
-        '''
-        mask_feats = []
-        feat = features['res2'].float()
-        for idx in range(self.maskformer_num_feature_levels):
-            feat = self.share_mask_branch[idx](feat)
-            mask_feats.append(feat)
-
-        feat = features['res2']
-        mask_feat = mask_feats[0]
-        for idx in range(self.maskformer_num_feature_levels-1, 0, -1):
-            mask_feat = mask_feats[idx] + F.interpolate(mask_feat, size=mask_feats[idx].shape[-2:], mode="bilinear", align_corners=False)
-        mask_feat = feat  + F.interpolate(mask_feat, size=feat.shape[-2:], mode="bilinear", align_corners=False)
-        '''
-
-        return out[-1], out[0], multi_scale_features
-        #return self.mask_features(mask_feat), out[0], multi_scale_features
+        return mask_features, out[0], multi_scale_features, key_frame
