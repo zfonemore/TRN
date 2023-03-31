@@ -176,14 +176,21 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         key_frame = torch.arange(0, bs, gap)
 
         if not is_last:
-            outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed, mask_features[key_frame])
+            if self.training:
+                share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
+                outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed[share_index], mask_features)
+            else:
+                outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed, mask_features[key_frame])
         else:
             share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
             outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed[share_index], mask_features)
 
         # NOTE: prediction is of higher-resolution
         # [B, Q, H, W] -> [B, Q, H*W] -> [B, h, Q, H*W] -> [B*h, Q, HW]
-        attn_mask = F.interpolate(outputs_mask, size=attn_mask_target_size, mode="bilinear", align_corners=False)
+        if self.training:
+            attn_mask = F.interpolate(outputs_mask[key_frame], size=attn_mask_target_size, mode="bilinear", align_corners=False)
+        else:
+            attn_mask = F.interpolate(outputs_mask, size=attn_mask_target_size, mode="bilinear", align_corners=False)
         # must use bool type
         # If a BoolTensor is provided, positions with ``True`` are not allowed to attend while ``False`` values will be unchanged.
         attn_mask = (attn_mask.sigmoid().flatten(2).unsqueeze(1).repeat(1, self.num_heads, 1, 1).flatten(0, 1) < 0.5).bool()

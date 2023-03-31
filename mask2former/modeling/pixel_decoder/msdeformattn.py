@@ -291,6 +291,7 @@ class MSDeformAttnPixelDecoder(nn.Module):
         self.lateral_convs = lateral_convs[::-1]
         self.output_convs = output_convs[::-1]
 
+        '''
         lateral_norm = get_norm(norm, conv_dim)
 
         lateral_conv = Conv2d(
@@ -301,6 +302,7 @@ class MSDeformAttnPixelDecoder(nn.Module):
         self.add_module("temporal_adapter_{}".format(1), lateral_conv)
 
         self.temporal_lateral = lateral_conv
+        '''
 
 
     @classmethod
@@ -347,11 +349,9 @@ class MSDeformAttnPixelDecoder(nn.Module):
         # Reverse feature maps into top-down order (from low to high resolution)
         for idx, f in enumerate(self.transformer_in_features[::-1]):
             x = features[f].float()  # deformable detr does not support half precision
-            proj_x = self.input_proj[idx](x)
-            proj_x = torch.cat((proj_x[key_frame], proj_x[nonkey_frame]), dim=1)
-            srcs.append(self.temporal_lateral(proj_x))
+            srcs.append(self.input_proj[idx](x))
 
-            pos.append(self.pe_layer(x[key_frame]))
+            pos.append(self.pe_layer(x))
 
         y, spatial_shapes, level_start_index = self.transformer(srcs, pos)
         bs = y.shape[0]
@@ -384,14 +384,14 @@ class MSDeformAttnPixelDecoder(nn.Module):
             # Following FPN implementation, we use nearest upsampling here
             y = cur_fpn
             up_out = F.interpolate(out[-1], size=cur_fpn.shape[-2:], mode="bilinear", align_corners=False)
-            y += up_out[share_index]
+            y += up_out#[share_index]
 
             y = output_conv(y)
             out.append(y)
 
         for o in out:
             if num_cur_levels < self.maskformer_num_feature_levels:
-                multi_scale_features.append(o)
+                multi_scale_features.append(o[key_frame])
                 num_cur_levels += 1
 
         mask_features = self.mask_features(out[-1])
