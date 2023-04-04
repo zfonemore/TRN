@@ -326,12 +326,16 @@ class MSDeformAttnPixelDecoder(nn.Module):
         return ret
 
     @autocast(enabled=False)
-    def forward_features(self, features):
+    def forward_features(self, features, gap):
 
         bs = len(features['res2'])
-        gap = 2
+        #gap = 2
         key_frame = torch.arange(0, bs, gap)
-        nonkey_frame = torch.arange(1, bs, gap)
+        nonkey_frame_list = []
+        for start in range(1, gap):
+            nonkey_frame_list.append(torch.arange(start, bs, gap))
+        #nonkey_frame2 = torch.arange(2, bs, gap)
+        #nonkey_frame3 = torch.arange(3, bs, gap)
         share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
 
         #TIME = True
@@ -348,8 +352,55 @@ class MSDeformAttnPixelDecoder(nn.Module):
 
         # Reverse feature maps into top-down order (from low to high resolution)
         for idx, f in enumerate(self.transformer_in_features[::-1]):
-            x = features[f].float()  # deformable detr does not support half precision
+            x = features[f][key_frame].float()  # deformable detr does not support half precision
+            #proj_x = self.input_proj[idx](features[f].float())
+            #x = proj_x[key_fram1]
+            last_num = 1
+            for nonkey_frame in nonkey_frame_list:
+                if len(x) == len(nonkey_frame):
+                    x += features[f][nonkey_frame]
+                    last_num += 1
+                else:
+                    x[:-1] += features[f][nonkey_frame]
+
+            x[:-1] /= gap
+            x[-1] /= last_num
+
+            '''
+            if bs % 2 == 0:
+                x += features[f][nonkey_frame1]
+                x /= 2
+                #x = torch.cat((x, proj_x[nonkey_frame1]), dim=1)
+                #x = self.temporal_lateral(x)
+            else:
+                x[:-1] += features[f][nonkey_frame1]
+                x[:-1] /= 2
+                #x[:-1] = self.temporal_lateral(torch.cat((x[:-1], proj_x[nonkey_frame1]), dim=1))
+            if bs % 4 == 0:
+                x += features[f][nonkey_frame1].float()
+                x += features[f][nonkey_frame2].float()
+                x += features[f][nonkey_frame3].float()
+                x /= 4  # deformable detr does not support half precision
+            elif bs % 4 == 1:
+                x[:-1] += features[f][nonkey_frame1].float()
+                x[:-1] += features[f][nonkey_frame2].float()
+                x[:-1] += features[f][nonkey_frame3].float()
+                x[:-1] /= 4  # deformable detr does not support half precision
+            elif bs % 4 == 2:
+                x += features[f][nonkey_frame1].float()
+                x[:-1] += features[f][nonkey_frame2].float()
+                x[:-1] += features[f][nonkey_frame3].float()
+                x[:-1] /= 4  # deformable detr does not support half precision
+                x[-1] /= 2
+            elif bs % 4 == 3:
+                x += features[f][nonkey_frame1].float()
+                x += features[f][nonkey_frame2].float()
+                x[:-1] += features[f][nonkey_frame3].float()
+                x[:-1] /= 4  # deformable detr does not support half precision
+                x[-1] /= 3
+            '''
             srcs.append(self.input_proj[idx](x))
+            #srcs.append(x)
 
             pos.append(self.pe_layer(x))
 
@@ -384,14 +435,16 @@ class MSDeformAttnPixelDecoder(nn.Module):
             # Following FPN implementation, we use nearest upsampling here
             y = cur_fpn
             up_out = F.interpolate(out[-1], size=cur_fpn.shape[-2:], mode="bilinear", align_corners=False)
-            y += up_out#[share_index]
+            #y += up_out#[share_index]
+            y += up_out[share_index]
 
             y = output_conv(y)
             out.append(y)
 
         for o in out:
             if num_cur_levels < self.maskformer_num_feature_levels:
-                multi_scale_features.append(o[key_frame])
+                #multi_scale_features.append(o[key_frame])
+                multi_scale_features.append(o)
                 num_cur_levels += 1
 
         mask_features = self.mask_features(out[-1])

@@ -18,8 +18,6 @@ from mask2former.modeling.transformer_decoder.position_encoding import PositionE
 from mask2former_video.modeling.transformer_decoder.video_mask2former_transformer_decoder import VideoMultiScaleMaskedTransformerDecoder
 import einops
 
-gap = 2
-
 @TRANSFORMER_DECODER_REGISTRY.register()
 class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransformerDecoder):
 
@@ -60,7 +58,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         N_steps = hidden_dim // 2
         self.pe_layer = PositionEmbeddingSine(N_steps, normalize=True)
 
-    def forward(self, x, mask_features, mask = None):
+    def forward(self, x, mask_features, mask = None, gap = None):
         # x is a list of multi-scale feature
         assert len(x) == self.num_feature_levels
         src = []
@@ -89,7 +87,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         predictions_mask = []
 
         # prediction heads on learnable query features
-        outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[0])
+        outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[0], gap=gap)
         predictions_class.append(outputs_class)
         predictions_mask.append(outputs_mask)
 
@@ -115,7 +113,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
                 output
             )
 
-            outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[(i + 1) % self.num_feature_levels], is_last=(i == (self.num_layers - 1)))
+            outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[(i + 1) % self.num_feature_levels], is_last=(i == (self.num_layers - 1)), gap=gap)
             predictions_class.append(outputs_class)
             predictions_mask.append(outputs_mask)
 
@@ -166,7 +164,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
 
         return out
 
-    def forward_prediction_heads(self, output, mask_features, attn_mask_target_size, is_last=False):
+    def forward_prediction_heads(self, output, mask_features, attn_mask_target_size, is_last=False, gap=None):
         decoder_output = self.decoder_norm(output)
         decoder_output = decoder_output.transpose(0, 1)
         outputs_class = self.class_embed(decoder_output)
