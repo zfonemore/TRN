@@ -112,11 +112,11 @@ class MaskFormerHead(nn.Module):
             ),
         }
 
-    def forward(self, features, mask=None, pre_mem=None, gap=None):
-        return self.layers(features, mask, pre_mem, gap)
+    def forward(self, features, mask=None, pre_mem=None, gap=None, key_frame=None):
+        return self.layers(features, mask, pre_mem, gap, key_frame)
 
-    def layers(self, features, mask=None, pre_mem=None, gap=None):
-        mask_features, transformer_encoder_features, multi_scale_features = self.pixel_decoder.forward_features(features, gap=gap)
+    def layers(self, features, mask=None, pre_mem=None, gap=None, key_frame=None):
+        mask_features, transformer_encoder_features, multi_scale_features = self.pixel_decoder.forward_features(features, gap=gap, key_frame=key_frame)
         if self.transformer_in_feature == "multi_scale_pixel_decoder":
             TIME = False
             #TIME = True
@@ -127,7 +127,7 @@ class MaskFormerHead(nn.Module):
                 torch.cuda.synchronize()
                 st = time.time()
 
-            predictions = self.predictor(multi_scale_features, mask_features, mask, gap=gap)
+            predictions = self.predictor(multi_scale_features, mask_features, mask, gap=gap, key_frame=key_frame)
 
             if TIME:
                 torch.cuda.synchronize()

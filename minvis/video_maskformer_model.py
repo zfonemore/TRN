@@ -240,8 +240,10 @@ class VideoMaskFormer_frame(nn.Module):
             ious = torch.load('pred_ious.pth')
             iou = int(ious[video_id] ** 2 * 3)
             gap = max(1, iou)
+            gap = 1
+            key_frame = torch.load('key_frames/'+ str(video_id)+'.pth')
         else:
-            gap = 2
+            gap = 1
 
         if not self.training and self.window_inference:
             outputs = self.run_window_inference(images.tensor)
@@ -261,7 +263,7 @@ class VideoMaskFormer_frame(nn.Module):
                     torch.cuda.synchronize()
                     st = time.time()
 
-                features = self.backbone(images.tensor)
+                features = self.backbone(images.tensor, gap=gap)
 
                 if TIME:
                     torch.cuda.synchronize()
@@ -269,7 +271,7 @@ class VideoMaskFormer_frame(nn.Module):
 
                     print('backbone time:', (ed - st)*1000)
 
-                outputs = self.sem_seg_head(features, gap=gap)
+                outputs = self.sem_seg_head(features, gap=gap, key_frame=key_frame)
 
         if self.training:
             # mask classification target
@@ -296,7 +298,7 @@ class VideoMaskFormer_frame(nn.Module):
             if perframe:
                 outputs = self.post_processing(outputs_list)
             else:
-                outputs = self.post_processing(outputs, gap=gap)
+                outputs = self.post_processing(outputs, gap=gap, key_frame=key_frame)
 
             if TIME:
                 torch.cuda.synchronize()
@@ -377,7 +379,7 @@ class VideoMaskFormer_frame(nn.Module):
 
         return indices
 
-    def post_processing(self, outputs_list, gap=None):
+    def post_processing(self, outputs_list, gap=None, key_frame=None):
         perframe = False
 
         if perframe:
@@ -399,8 +401,16 @@ class VideoMaskFormer_frame(nn.Module):
 
 
         bs = len(pred_masks)
-        key_frame = torch.arange(0, bs, gap)
-        share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
+        #key_frame = torch.arange(0, bs, gap)
+        #share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
+        repeat_index = torch.ones(sum(key_frame), dtype=torch.long)
+        cnt = 0
+        for frame in key_frame:
+            if frame == 1:
+                cnt += 1
+            else:
+                repeat_index[cnt-1] += 1
+        #share_index = torch.repeat_interleave(torch.arange(len(repeat_index)), repeat_index)
 
         # pred_logits: 1 t q c
         # pred_masks: 1 q t h w
@@ -416,15 +426,18 @@ class VideoMaskFormer_frame(nn.Module):
         out_masks = []
         out_embds = []
         out_logits.append(pred_logits[0])
-        out_masks.append(pred_masks[:min(gap, len(pred_masks))])
+        out_masks.append(pred_masks[:min(repeat_index[0], len(pred_masks))])
         out_embds.append(pred_embds[0])
 
+        cnt = repeat_index[0]
         for i in range(1, len(pred_logits)):
             indices = self.match_from_embds(out_embds[-1], pred_embds[i])
 
             out_logits.append(pred_logits[i][indices, :])
-            out_masks.append(pred_masks[i*gap:min((i+1)*gap, len(pred_masks))][:, indices, :, :])
+            #out_masks.append(pred_masks[i*gap:min((i+1)*gap, len(pred_masks))][:, indices, :, :])
+            out_masks.append(pred_masks[cnt:cnt+repeat_index[i]][:, indices, :, :])
             out_embds.append(pred_embds[i][indices, :])
+            cnt += repeat_index[i]
 
         out_logits = sum(out_logits)/len(out_logits)
         out_masks = torch.cat(out_masks, dim=0).transpose(0, 1)  # q h w -> q t h w

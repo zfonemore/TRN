@@ -58,7 +58,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         N_steps = hidden_dim // 2
         self.pe_layer = PositionEmbeddingSine(N_steps, normalize=True)
 
-    def forward(self, x, mask_features, mask = None, gap = None):
+    def forward(self, x, mask_features, mask = None, gap = None, key_frame = None):
         # x is a list of multi-scale feature
         assert len(x) == self.num_feature_levels
         src = []
@@ -87,7 +87,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         predictions_mask = []
 
         # prediction heads on learnable query features
-        outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[0], gap=gap)
+        outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[0], gap=gap, key_frame=key_frame)
         predictions_class.append(outputs_class)
         predictions_mask.append(outputs_mask)
 
@@ -113,7 +113,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
                 output
             )
 
-            outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[(i + 1) % self.num_feature_levels], is_last=(i == (self.num_layers - 1)), gap=gap)
+            outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[(i + 1) % self.num_feature_levels], is_last=(i == (self.num_layers - 1)), gap=gap, key_frame=key_frame)
             predictions_class.append(outputs_class)
             predictions_mask.append(outputs_mask)
 
@@ -164,23 +164,40 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
 
         return out
 
-    def forward_prediction_heads(self, output, mask_features, attn_mask_target_size, is_last=False, gap=None):
+    def forward_prediction_heads(self, output, mask_features, attn_mask_target_size, is_last=False, gap=None, key_frame=None):
         decoder_output = self.decoder_norm(output)
         decoder_output = decoder_output.transpose(0, 1)
         outputs_class = self.class_embed(decoder_output)
         mask_embed = self.mask_embed(decoder_output)
 
-        bs = len(mask_features)
-        key_frame = torch.arange(0, bs, gap)
+        if key_frame is None:
+            bs = len(mask_features)
+            key_frame = torch.arange(0, bs, gap)
+        else:
+            repeat_index = torch.ones(sum(key_frame), dtype=torch.long)
+            cnt = 0
+            for frame in key_frame:
+                if frame == 1:
+                    cnt += 1
+                else:
+                    repeat_index[cnt-1] += 1
+            new_key_frame = []
+            for i, frame in enumerate(key_frame):
+                if frame == 1:
+                    new_key_frame.append(i)
+            key_frame = new_key_frame
+
 
         if not is_last:
             if self.training:
-                share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
+                share_index = torch.repeat_interleave(torch.arange(len(repeat_index)), repeat_index)
+                #share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
                 outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed[share_index], mask_features)
             else:
                 outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed, mask_features[key_frame])
         else:
-            share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
+            #share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
+            share_index = torch.repeat_interleave(torch.arange(len(repeat_index)), repeat_index)
             outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed[share_index], mask_features)
 
         # NOTE: prediction is of higher-resolution
