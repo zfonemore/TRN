@@ -338,12 +338,16 @@ class MSDeformAttnPixelDecoder(nn.Module):
         else:
             repeat_index = torch.ones(sum(key_frame), dtype=torch.long)
             cnt = 0
-            for frame in key_frame:
+            index = torch.arange(len(key_frame)).to(features['res2'].device)
+
+            for i, frame in enumerate(key_frame):
                 if frame == 1:
                     cnt += 1
                 else:
                     repeat_index[cnt-1] += 1
+                index[i] = cnt - 1
             share_index = torch.repeat_interleave(torch.arange(len(repeat_index)), repeat_index)
+
             new_key_frame = []
             for i, frame in enumerate(key_frame):
                 if frame == 1:
@@ -373,10 +377,12 @@ class MSDeformAttnPixelDecoder(nn.Module):
         srcs = []
         pos = []
 
+        from torch_scatter import scatter
         # Reverse feature maps into top-down order (from low to high resolution)
         for idx, f in enumerate(self.transformer_in_features[::-1]):
-            x = features[f][key_frame].float()  # deformable detr does not support half precision
             #x = features[f][key_frame].float()  # deformable detr does not support half precision
+            #x = features[f][key_frame].float()  # deformable detr does not support half precision
+            x = scatter(features[f], index, dim=0, reduce="mean").float()
             last_num = 1
             '''
             for nonkey_frame in nonkey_frame_list:
