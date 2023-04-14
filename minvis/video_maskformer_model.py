@@ -238,12 +238,14 @@ class VideoMaskFormer_frame(nn.Module):
         if not self.training:
             video_id = int(batched_inputs[0]['video_id']) - 1
             ious = torch.load('pred_ious.pth')
-            iou = int(ious[video_id] ** 2 * 3)
+            iou = int(ious[video_id] ** 2 * 8)
             gap = max(1, iou)
-            gap = 1
-            key_frame = torch.load('key_frames/'+ str(video_id)+'.pth')
+            key_frame = None
+            #gap = 1
+            #key_frame = torch.load('key_frames/'+ str(video_id)+'.pth')
         else:
-            gap = 1
+            gap = 3
+            key_frame = None
 
         if not self.training and self.window_inference:
             outputs = self.run_window_inference(images.tensor)
@@ -400,9 +402,19 @@ class VideoMaskFormer_frame(nn.Module):
             pred_logits, pred_masks, pred_embds = outputs['pred_logits'], outputs['pred_masks'], outputs['pred_embds']
 
 
+        # pred_logits: 1 t q c
+        # pred_masks: 1 q t h w
+        pred_logits = pred_logits[0]
+        pred_masks = einops.rearrange(pred_masks[0], 'q t h w -> t q h w')
+        pred_embds = einops.rearrange(pred_embds[0], 'c t q -> t q c')
+
         bs = len(pred_masks)
-        #key_frame = torch.arange(0, bs, gap)
-        #share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
+        if key_frame is None:
+            key_frame = torch.zeros(bs, dtype=torch.long)
+            key_frame[0::gap] = 1
+
+            #key_frame = torch.arange(0, bs, gap)
+            #share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
         repeat_index = torch.ones(sum(key_frame), dtype=torch.long)
         cnt = 0
         for frame in key_frame:
@@ -410,13 +422,6 @@ class VideoMaskFormer_frame(nn.Module):
                 cnt += 1
             else:
                 repeat_index[cnt-1] += 1
-        #share_index = torch.repeat_interleave(torch.arange(len(repeat_index)), repeat_index)
-
-        # pred_logits: 1 t q c
-        # pred_masks: 1 q t h w
-        pred_logits = pred_logits[0]
-        pred_masks = einops.rearrange(pred_masks[0], 'q t h w -> t q h w')
-        pred_embds = einops.rearrange(pred_embds[0], 'c t q -> t q c')
 
         pred_logits = list(torch.unbind(pred_logits))
         #pred_masks = list(torch.unbind(pred_masks))

@@ -335,6 +335,7 @@ class MSDeformAttnPixelDecoder(nn.Module):
             for start in range(1, gap):
                 nonkey_frame_list.append(torch.arange(start, bs, gap))
             share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
+            index = None
         else:
             repeat_index = torch.ones(sum(key_frame), dtype=torch.long)
             cnt = 0
@@ -358,16 +359,6 @@ class MSDeformAttnPixelDecoder(nn.Module):
         #TIME = True
         TIME = False
 
-        '''
-        import math
-        share_bs = len(features['res3'])
-        share_gap = math.ceil(gap / 2)
-        share_key_frame = torch.arange(0, share_bs, share_gap)
-        share_nonkey_frame_list = []
-        for start in range(1, share_gap):
-            share_nonkey_frame_list.append(torch.arange(start, share_bs, share_gap))
-        '''
-
         if TIME:
             import time
 
@@ -381,23 +372,38 @@ class MSDeformAttnPixelDecoder(nn.Module):
         # Reverse feature maps into top-down order (from low to high resolution)
         for idx, f in enumerate(self.transformer_in_features[::-1]):
             #x = features[f][key_frame].float()  # deformable detr does not support half precision
-            #x = features[f][key_frame].float()  # deformable detr does not support half precision
-            x = scatter(features[f], index, dim=0, reduce="mean").float()
-            last_num = 1
-            '''
-            for nonkey_frame in nonkey_frame_list:
-                if len(x) == len(nonkey_frame):
-                    x += features[f][nonkey_frame]
-                    last_num += 1
-                else:
-                    x[:-1] += features[f][nonkey_frame]
+            if index is not None:
+                x = scatter(features[f], index, dim=0, reduce="mean").float()
+            else:
+                if (idx==2):
+                    x = features[f][key_frame].float()  # deformable detr does not support half precision
+                    last_num = 1
+                    for nonkey_frame in nonkey_frame_list:
+                        if len(x) == len(nonkey_frame):
+                            x += features[f][nonkey_frame]
+                            last_num += 1
+                        else:
+                            x[:-1] += features[f][nonkey_frame]
 
-            x[:-1] /= gap
-            x[-1] /= last_num
-            '''
+                    x[:-1] /= gap
+                    x[-1] /= last_num
+                else:
+                    x = features[f].float()  # deformable detr does not support half precision
+
+                '''
+                last_num = 1
+                for nonkey_frame in nonkey_frame_list:
+                    if len(x) == len(nonkey_frame):
+                        x += features[f][nonkey_frame]
+                        last_num += 1
+                    else:
+                        x[:-1] += features[f][nonkey_frame]
+
+                x[:-1] /= gap
+                x[-1] /= last_num
+                '''
 
             srcs.append(self.input_proj[idx](x))
-            #srcs.append(x)
 
             pos.append(self.pe_layer(x))
 

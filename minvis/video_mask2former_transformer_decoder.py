@@ -173,6 +173,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         if key_frame is None:
             bs = len(mask_features)
             key_frame = torch.arange(0, bs, gap)
+            share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
         else:
             repeat_index = torch.ones(sum(key_frame), dtype=torch.long)
             cnt = 0
@@ -186,18 +187,15 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
                 if frame == 1:
                     new_key_frame.append(i)
             key_frame = new_key_frame
+            share_index = torch.repeat_interleave(torch.arange(len(repeat_index)), repeat_index)
 
 
         if not is_last:
             if self.training:
-                share_index = torch.repeat_interleave(torch.arange(len(repeat_index)), repeat_index)
-                #share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
                 outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed[share_index], mask_features)
             else:
                 outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed, mask_features[key_frame])
         else:
-            #share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
-            share_index = torch.repeat_interleave(torch.arange(len(repeat_index)), repeat_index)
             outputs_mask = torch.einsum("bqc,bchw->bqhw", mask_embed[share_index], mask_features)
 
         # NOTE: prediction is of higher-resolution

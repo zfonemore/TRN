@@ -648,7 +648,7 @@ class SwinTransformer(nn.Module):
                 nn.init.constant_(m.bias, 0)
                 nn.init.constant_(m.weight, 1.0)
 
-    def forward(self, x):
+    def forward(self, x, gap=1):
         """Forward function."""
         x = self.patch_embed(x)
 
@@ -664,7 +664,13 @@ class SwinTransformer(nn.Module):
         x = self.pos_drop(x)
 
         outs = {}
+        import time
+        TIME = False
         for i in range(self.num_layers):
+            if TIME:
+                torch.cuda.synchronize()
+                st = time.time()
+
             layer = self.layers[i]
             x_out, H, W, x, Wh, Ww = layer(x, Wh, Ww)
 
@@ -674,6 +680,11 @@ class SwinTransformer(nn.Module):
 
                 out = x_out.view(-1, H, W, self.num_features[i]).permute(0, 3, 1, 2).contiguous()
                 outs["res{}".format(i + 2)] = out
+
+            if TIME:
+                torch.cuda.synchronize()
+                ed = time.time()
+                print('res{} time: {}'.format(i + 2, (ed - st)*1000))
 
         return outs
 
@@ -740,7 +751,7 @@ class D2SwinTransformer(SwinTransformer, Backbone):
             "res5": self.num_features[3],
         }
 
-    def forward(self, x):
+    def forward(self, x, gap=1):
         """
         Args:
             x: Tensor of shape (N,C,H,W). H, W must be a multiple of ``self.size_divisibility``.
@@ -751,7 +762,7 @@ class D2SwinTransformer(SwinTransformer, Backbone):
             x.dim() == 4
         ), f"SwinTransformer takes an input of shape (N, C, H, W). Got {x.shape} instead!"
         outputs = {}
-        y = super().forward(x)
+        y = super().forward(x, gap)
         for k in y.keys():
             if k in self._out_features:
                 outputs[k] = y[k]
