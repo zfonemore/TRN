@@ -237,8 +237,8 @@ class VideoMaskFormer_frame(nn.Module):
 
         if not self.training:
             video_id = int(batched_inputs[0]['video_id']) - 1
-            ious = torch.load('pred_ious.pth')
-            iou = int(ious[video_id] ** 2 * 8)
+            ious = torch.load('ious.pth')
+            iou = int(ious[video_id] ** 2 * 6)
             gap = max(1, iou)
             key_frame = None
             #gap = 1

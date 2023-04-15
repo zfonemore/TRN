@@ -368,14 +368,14 @@ class MSDeformAttnPixelDecoder(nn.Module):
         srcs = []
         pos = []
 
-        from torch_scatter import scatter
         # Reverse feature maps into top-down order (from low to high resolution)
         for idx, f in enumerate(self.transformer_in_features[::-1]):
             #x = features[f][key_frame].float()  # deformable detr does not support half precision
             if index is not None:
+                from torch_scatter import scatter
                 x = scatter(features[f], index, dim=0, reduce="mean").float()
             else:
-                if (idx==2):
+                if (idx==-1):
                     x = features[f][key_frame].float()  # deformable detr does not support half precision
                     last_num = 1
                     for nonkey_frame in nonkey_frame_list:

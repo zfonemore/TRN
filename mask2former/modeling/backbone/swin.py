@@ -671,6 +671,13 @@ class SwinTransformer(nn.Module):
                 torch.cuda.synchronize()
                 st = time.time()
 
+            if i == 1:
+                from torch_scatter import scatter
+                index = x.new_zeros(len(x), dtype=torch.long)
+                for idx, pos in enumerate(range(0, len(x), gap)):
+                    index[pos:max(pos+gap, len(x))] = idx
+                x = scatter(x, index, dim=0, reduce='sum')
+
             layer = self.layers[i]
             x_out, H, W, x, Wh, Ww = layer(x, Wh, Ww)
 
