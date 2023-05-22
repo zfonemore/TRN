@@ -40,8 +40,8 @@ pip install git+https://github.com/cocodataset/panopticapi.git
 pip install git+https://github.com/mcordts/cityscapesScripts.git
 
 cd ..
-git clone git@github.com:NVlabs/MinVIS.git
-cd MinVIS
+git clone git@github.com:zfonemore/TRN.git
+cd TRN
 pip install -r requirements.txt
 cd mask2former/modeling/pixel_decoder/ops
 sh make.sh
