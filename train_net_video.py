@@ -1,8 +1,6 @@
 # Copyright (c) 2021-2022, NVIDIA Corporation & Affiliates. All rights reserved.
 #
 # This work is made available under the Nvidia Source Code License-NC.
-# To view a copy of this license, visit
-# https://github.com/NVlabs/MinVIS/blob/main/LICENSE
 
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 """
@@ -54,10 +52,10 @@ from detectron2.utils.logger import setup_logger
 # Models
 from mask2former import add_maskformer2_config
 from mask2former_video import add_maskformer2_video_config
-from minvis import (
+from trn import (
     YTVISDatasetMapper,
     YTVISEvaluator,
-    add_minvis_config,
+    add_trn_config,
     build_detection_train_loader,
     build_detection_test_loader,
     get_detection_dataset_dicts,
@@ -257,14 +255,14 @@ def setup(args):
     add_deeplab_config(cfg)
     add_maskformer2_config(cfg)
     add_maskformer2_video_config(cfg)
-    add_minvis_config(cfg)
+    add_trn_config(cfg)
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     cfg.freeze()
     default_setup(cfg, args)
     # Setup logger for "mask_former" module
     setup_logger(name="mask2former")
-    setup_logger(output=cfg.OUTPUT_DIR, distributed_rank=comm.get_rank(), name="minvis")
+    setup_logger(output=cfg.OUTPUT_DIR, distributed_rank=comm.get_rank(), name="trn")
     return cfg
 
 

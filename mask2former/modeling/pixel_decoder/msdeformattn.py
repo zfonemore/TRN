@@ -334,40 +334,27 @@ class MSDeformAttnPixelDecoder(nn.Module):
         for start in range(1, gap):
             nonkey_frame_list.append(torch.arange(start, bs, gap))
         share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
-        index = None
-
-        TIME = False
-
-        if TIME:
-            import time
-
-            torch.cuda.synchronize()
-            st = time.time()
 
         srcs = []
         pos = []
 
-        TFM = True #False
+        TFM = True
         # Reverse feature maps into top-down order (from low to high resolution)
         for idx, f in enumerate(self.transformer_in_features[::-1]):
-            if index is not None:
-                from torch_scatter import scatter
-                x = scatter(features[f], index, dim=0, reduce="mean").float()
-            else:
-                if TFM:
-                    x = features[f][key_frame].float()  # deformable detr does not support half precision
-                    last_num = 1
-                    for nonkey_frame in nonkey_frame_list:
-                        if len(x) == len(nonkey_frame):
-                            x += features[f][nonkey_frame]
-                            last_num += 1
-                        else:
-                            x[:-1] += features[f][nonkey_frame]
+            if TFM:
+                x = features[f][key_frame].float()  # deformable detr does not support half precision
+                last_num = 1
+                for nonkey_frame in nonkey_frame_list:
+                    if len(x) == len(nonkey_frame):
+                        x += features[f][nonkey_frame]
+                        last_num += 1
+                    else:
+                        x[:-1] += features[f][nonkey_frame]
 
-                    x[:-1] /= gap
-                    x[-1] /= last_num
-                else:
-                    x = features[f].float()  # deformable detr does not support half precision
+                x[:-1] /= gap
+                x[-1] /= last_num
+            else:
+                x = features[f].float()  # deformable detr does not support half precision
 
             srcs.append(self.input_proj[idx](x))
 
@@ -389,10 +376,6 @@ class MSDeformAttnPixelDecoder(nn.Module):
         num_cur_levels = 0
         for i, z in enumerate(y):
             out.append(z.transpose(1, 2).view(bs, -1, spatial_shapes[i][0], spatial_shapes[i][1]))
-
-        if TIME:
-            torch.cuda.synchronize()
-            fp_ed = time.time()
 
         # append `out` with extra FPN levels
         # Reverse feature maps into top-down order (from low to high resolution)
@@ -421,14 +404,5 @@ class MSDeformAttnPixelDecoder(nn.Module):
                 num_cur_levels += 1
 
         mask_features = self.mask_features(out[-1])
-
-        if TIME:
-            torch.cuda.synchronize()
-            ed = time.time()
-
-            print('fpn time:', (ed - st) * 1000)
-
-            print('mask feat time:', (ed - fp_ed) * 1000)
-
 
         return mask_features, out[0], multi_scale_features
