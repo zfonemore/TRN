@@ -7,19 +7,11 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
 
 # config
-from .config import add_minvis_config
+from .config import add_trn_config
 
 # models
 from .video_maskformer_model import VideoMaskFormer_frame
-from .tarvis_video_model import VideoMaskFormer_frame_tarvis
-from .mem_video_model import VideoMaskFormer_frame_mem
 from .video_mask2former_transformer_decoder import VideoMultiScaleMaskedTransformerDecoder_frame
-from .tarvis_video_mask2former_transformer_decoder import VideoMultiScaleMaskedTransformerDecoder_frame_tarvis
-from .mem_video_mask2former_transformer_decoder import VideoMultiScaleMaskedTransformerDecoder_frame_mem
-from .share_mask_fpn import MSSharePixelDecoder
-from .share_mask_former_head import ShareMaskFormerHead
-from .share_video_maskformer_model import ShareVideoMaskFormer_frame
-from .share_video_mask2former_transformer_decoder import ShareVideoMultiScaleMaskedTransformerDecoder_frame
 
 # video
 from .data_video import (
