@@ -29,8 +29,6 @@ from scipy.optimize import linear_sum_assignment
 
 logger = logging.getLogger(__name__)
 
-#TIME = True
-TIME = False
 
 def get_bounding_box(masks):
     boxes = torch.zeros(masks.shape[0], 4, dtype=torch.float32)
@@ -70,6 +68,7 @@ class VideoMaskFormer_frame(nn.Module):
         # video
         num_frames,
         window_inference,
+        trn_mode,
     ):
         """
         Args:
@@ -113,6 +112,7 @@ class VideoMaskFormer_frame(nn.Module):
 
         self.num_frames = num_frames
         self.window_inference = window_inference
+        self.trn_mode = trn_mode
 
     @classmethod
     def from_config(cls, cfg):
@@ -172,7 +172,8 @@ class VideoMaskFormer_frame(nn.Module):
             "pixel_std": cfg.MODEL.PIXEL_STD,
             # video
             "num_frames": cfg.INPUT.SAMPLING_FRAME_NUM,
-            "window_inference": cfg.MODEL.MASK_FORMER.TEST.WINDOW_INFERENCE
+            "window_inference": cfg.MODEL.MASK_FORMER.TEST.WINDOW_INFERENCE,
+            "trn_mode": cfg.MODEL.TRN_MODE
         }
 
     @property
@@ -212,45 +213,29 @@ class VideoMaskFormer_frame(nn.Module):
         images = [(x - self.pixel_mean) / self.pixel_std for x in images]
         images = ImageList.from_tensors(images, self.size_divisibility)
 
-
-        '''
-        image_tensor = images.tensor#[::2]
-        _, _, h, w = image_tensor.shape
-        boxes = torch.load('boxes/%d.pth'%video_id)
-
-        import random
-        sample_box = boxes[random.randint(0, len(boxes)-1)].int()
-        if video_id == 15:
-            import pdb
-            pdb.set_trace()
-        if max(sample_box) == 0:
-            sample_box = (int(0 * h), int(0 * w), int(h), int(w))
-        sample_image_tensor = image_tensor[:, :, sample_box[0]:sample_box[2], sample_box[1]:sample_box[3]].flatten(1)
-
-        simi = 0
-        for index in range(1, len(sample_image_tensor)):
-            simi += F.cosine_similarity(sample_image_tensor[index,None], sample_image_tensor[index-1,None])
-        simi /= (len(sample_image_tensor) - 1)
-        torch.save(simi, 'simi/%d.pth'%video_id)
-        '''
-
-
         if not self.training:
             video_id = int(batched_inputs[0]['video_id']) - 1
-            ious = torch.load('ious.pth')
-            iou = int(ious[video_id] ** 2 * 6)
-            gap = max(1, iou)
-            key_frame = None
-            #gap = 1
-            #key_frame = torch.load('key_frames/'+ str(video_id)+'.pth')
+            ious = torch.load('ytvis19_pred_ious.pth')
+
+            if self.trn_mode is None:
+                gap = 1
+            elif self.trn_mode == 'Turbo':
+                gap = max(1, int(ious[video_id] ** 2 * 7))
+            elif self.trn_mode == 'Balance':
+                gap = max(1, int(ious[video_id] ** 2 * 3))
+
         else:
-            gap = 3
-            key_frame = None
+            if self.trn_mode is None:
+                gap = 1
+            else:
+                gap = 2
 
         if not self.training and self.window_inference:
-            outputs = self.run_window_inference(images.tensor)
+            outputs, repeat_index = self.run_window_inference(images.tensor, gap=gap)
+            perframe = False
         else:
             perframe = False
+            repeat_index = None
             if perframe:
                 outputs_list = []
                 for image in images.tensor:
@@ -259,21 +244,9 @@ class VideoMaskFormer_frame(nn.Module):
                     outputs_list.append(outputs)
             else:
 
-                if TIME:
-                    import time
+                features = self.backbone(images.tensor)
 
-                    torch.cuda.synchronize()
-                    st = time.time()
-
-                features = self.backbone(images.tensor, gap=gap)
-
-                if TIME:
-                    torch.cuda.synchronize()
-                    ed = time.time()
-
-                    print('backbone time:', (ed - st)*1000)
-
-                outputs = self.sem_seg_head(features, gap=gap, key_frame=key_frame)
+                outputs = self.sem_seg_head(features, gap=gap)
 
         if self.training:
             # mask classification target
@@ -293,24 +266,11 @@ class VideoMaskFormer_frame(nn.Module):
             return losses
         else:
 
-            if TIME:
-                torch.cuda.synchronize()
-                st = time.time()
-
             if perframe:
                 outputs = self.post_processing(outputs_list)
             else:
-                outputs = self.post_processing(outputs, gap=gap, key_frame=key_frame)
+                outputs = self.post_processing(outputs, gap=gap, repeat_index=repeat_index)
 
-            if TIME:
-                torch.cuda.synchronize()
-                ed = time.time()
-
-                print('post process time:', (ed - st)*1000)
-
-
-                torch.cuda.synchronize()
-                st = time.time()
 
             mask_cls_results = outputs["pred_logits"]
             mask_pred_results = outputs["pred_masks"]
@@ -326,12 +286,6 @@ class VideoMaskFormer_frame(nn.Module):
             width = input_per_image.get("width", image_size[1])
 
             video_outputs = retry_if_cuda_oom(self.inference_video)(mask_cls_result, mask_pred_result, image_size, height, width, first_resize_size, video_id)
-
-            if TIME:
-                torch.cuda.synchronize()
-                ed = time.time()
-
-                print('inference video time:', (ed - st)*1000)
 
             return video_outputs
 
@@ -381,11 +335,10 @@ class VideoMaskFormer_frame(nn.Module):
 
         return indices
 
-    def post_processing(self, outputs_list, gap=None, key_frame=None):
+    def post_processing(self, outputs_list, gap=None, repeat_index=None):
         perframe = False
 
         if perframe:
-
             pred_logits_list, pred_masks_list, pred_embds_list = [], [], []
             for outputs in outputs_list:
                 pred_logits, pred_masks, pred_embds = outputs['pred_logits'], outputs['pred_masks'], outputs['pred_embds']
@@ -408,20 +361,17 @@ class VideoMaskFormer_frame(nn.Module):
         pred_masks = einops.rearrange(pred_masks[0], 'q t h w -> t q h w')
         pred_embds = einops.rearrange(pred_embds[0], 'c t q -> t q c')
 
-        bs = len(pred_masks)
-        if key_frame is None:
+        if repeat_index is None:
+            bs = len(pred_masks)
             key_frame = torch.zeros(bs, dtype=torch.long)
             key_frame[0::gap] = 1
-
-            #key_frame = torch.arange(0, bs, gap)
-            #share_index = torch.repeat_interleave(torch.arange(len(key_frame)), gap)[:bs]
-        repeat_index = torch.ones(sum(key_frame), dtype=torch.long)
-        cnt = 0
-        for frame in key_frame:
-            if frame == 1:
-                cnt += 1
-            else:
-                repeat_index[cnt-1] += 1
+            repeat_index = torch.ones(sum(key_frame), dtype=torch.long)
+            cnt = 0
+            for frame in key_frame:
+                if frame == 1:
+                    cnt += 1
+                else:
+                    repeat_index[cnt-1] += 1
 
         pred_logits = list(torch.unbind(pred_logits))
         #pred_masks = list(torch.unbind(pred_masks))
@@ -434,13 +384,17 @@ class VideoMaskFormer_frame(nn.Module):
         out_masks.append(pred_masks[:min(repeat_index[0], len(pred_masks))])
         out_embds.append(pred_embds[0])
 
-        cnt = repeat_index[0]
+        cnt = int(repeat_index[0])
         for i in range(1, len(pred_logits)):
             indices = self.match_from_embds(out_embds[-1], pred_embds[i])
 
             out_logits.append(pred_logits[i][indices, :])
             #out_masks.append(pred_masks[i*gap:min((i+1)*gap, len(pred_masks))][:, indices, :, :])
-            out_masks.append(pred_masks[cnt:cnt+repeat_index[i]][:, indices, :, :])
+            try:
+                out_masks.append(pred_masks[cnt:cnt+repeat_index[i]][:, indices, :, :])
+            except:
+                import pdb
+                pdb.set_trace()
             out_embds.append(pred_embds[i][indices, :])
             cnt += repeat_index[i]
 
@@ -455,21 +409,29 @@ class VideoMaskFormer_frame(nn.Module):
 
         return outputs
 
-    def run_window_inference(self, images_tensor, window_size=30):
+    def run_window_inference(self, images_tensor, window_size=30, gap=1):
         iters = len(images_tensor) // window_size
         if len(images_tensor) % window_size != 0:
             iters += 1
         out_list = []
+        repeat_index = []
         for i in range(iters):
             start_idx = i * window_size
             end_idx = (i+1) * window_size
 
             features = self.backbone(images_tensor[start_idx:end_idx])
-            out = self.sem_seg_head(features)
+            gap = min(gap, len(features['res2']))
+            out = self.sem_seg_head(features, gap=gap)
             del features['res2'], features['res3'], features['res4'], features['res5']
             for j in range(len(out['aux_outputs'])):
                 del out['aux_outputs'][j]['pred_masks'], out['aux_outputs'][j]['pred_logits']
             out_list.append(out)
+
+            window_len = out['pred_logits'].size(1)
+            repeat_index_window = torch.ones(window_len, dtype=torch.long) * gap
+            repeat_index_window[-1] = out['pred_masks'].size(2) - (window_len - 1) * gap
+            repeat_index.append(repeat_index_window)
+        repeat_index = torch.cat(repeat_index)
 
         # merge outputs
         outputs = {}
@@ -477,7 +439,7 @@ class VideoMaskFormer_frame(nn.Module):
         outputs['pred_masks'] = torch.cat([x['pred_masks'] for x in out_list], dim=2).detach()
         outputs['pred_embds'] = torch.cat([x['pred_embds'] for x in out_list], dim=2).detach()
 
-        return outputs
+        return outputs, repeat_index
 
     def prepare_targets(self, targets, images):
         h_pad, w_pad = images.tensor.shape[-2:]
@@ -511,16 +473,13 @@ class VideoMaskFormer_frame(nn.Module):
         if len(pred_cls) > 0:
             scores = F.softmax(pred_cls, dim=-1)[:, :-1]
             labels = torch.arange(self.sem_seg_head.num_classes, device=self.device).unsqueeze(0).repeat(self.num_queries, 1).flatten(0, 1)
-            # keep top-10 predictions
+
+           # keep top-10 predictions
             scores_per_image, topk_indices = scores.flatten(0, 1).topk(10, sorted=False)
+
             labels_per_image = labels[topk_indices]
             topk_indices = topk_indices // self.sem_seg_head.num_classes
             pred_masks = pred_masks[topk_indices]
-
-            if TIME:
-                import time
-                torch.cuda.synchronize()
-                st = time.time()
 
             pred_masks = F.interpolate(
                 pred_masks, size=first_resize_size, mode="bilinear", align_corners=False
@@ -539,24 +498,15 @@ class VideoMaskFormer_frame(nn.Module):
                         pred_boxes_perframe = get_bounding_box(pred_masks_perframe)
                         pred_boxes.append(pred_boxes_perframe)
                     pred_boxes = torch.cat(pred_boxes, dim=0).int()
-                    torch.save(pred_boxes, './boxes/' + str(video_id) + '.pth')
+                    torch.save(pred_boxes, './ytvis19_boxes/' + str(video_id) + '.pth')
                 else:
                     pred_boxes = torch.zeros((len(pred_masks[0]), 4), dtype=torch.int32)
-                    torch.save(pred_boxes, './boxes/' + str(video_id) + '.pth')
+                    torch.save(pred_boxes, './ytvis19_boxes/' + str(video_id) + '.pth')
 
             pred_masks = pred_masks[:, :, : img_size[0], : img_size[1]]
             pred_masks = F.interpolate(
                 pred_masks, size=(output_height, output_width), mode="bilinear", align_corners=False
             )
-
-            if TIME:
-                torch.cuda.synchronize()
-                ed = time.time()
-
-                print('interpolate time:', (ed - st)*1000)
-
-                torch.cuda.synchronize()
-                st = time.time()
 
             masks = pred_masks > 0.
 
@@ -564,12 +514,6 @@ class VideoMaskFormer_frame(nn.Module):
             out_labels = labels_per_image.tolist()
             #out_masks = [m for m in masks.cpu()]
             out_masks = [m for m in masks]
-
-            if TIME:
-                torch.cuda.synchronize()
-                ed = time.time()
-
-                print('to cpu time:', (ed - st)*1000)
         else:
             out_scores = []
             out_labels = []
