@@ -1,9 +1,9 @@
-# MinVIS Model Zoo
+# TRN Model Zoo
 
 ## Introduction
 
-This file documents a collection of trained MinVIS models.
-The numbers in this page are for the specific checkpoints and are different from the paper, which are averaged from multiple runs. The "Config" column contains a link to the config file. Running `train_net_video.py --num-gpus $num_gpus` with this config file will train a model with the same setting. ResNet-50 results are trained with 8 GPUs and Swin-L results are trained with 16 GPUs.
+This file documents a collection of trained TRN models.
+The numbers in this page are for the specific checkpoints and are different from the paper, which are averaged from multiple runs. The "Config" column contains a link to the config file. Running `train_net_video.py --num-gpus $num_gpus` with this config file will train a model with the same setting. ResNet-50 results are trained with 8 GPUs.
 
 ## Video Instance Segmentation
 ### YouTubeVIS 2019
