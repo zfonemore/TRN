@@ -3,7 +3,7 @@ MODEL:
   WEIGHTS: "model_final_3c8ec9.pkl"
   META_ARCHITECTURE: "VideoMaskFormer_frame"
   TRN:
-    Mode: None # None means no TRN, using original MinVIS
+    MODE: None # None means no TRN, using original MinVIS
   SEM_SEG_HEAD:
     NAME: "MaskFormerHead"
     IGNORE_VALUE: 255

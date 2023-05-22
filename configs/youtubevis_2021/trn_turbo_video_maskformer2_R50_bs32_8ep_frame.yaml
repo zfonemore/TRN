@@ -3,7 +3,7 @@ MODEL:
   WEIGHTS: "model_final_3c8ec9.pkl"
   META_ARCHITECTURE: "VideoMaskFormer_frame"
   TRN:
-    Mode: 'Turbo' # TRN Turbo Mode
+    MODE: 'Turbo' # TRN Turbo Mode
   SEM_SEG_HEAD:
     NAME: "MaskFormerHead"
     IGNORE_VALUE: 255

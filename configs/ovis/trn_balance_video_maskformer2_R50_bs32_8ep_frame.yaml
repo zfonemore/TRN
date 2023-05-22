@@ -3,7 +3,7 @@ MODEL:
   WEIGHTS: "model_final_3c8ec9.pkl"
   META_ARCHITECTURE: "VideoMaskFormer_frame"
   TRN:
-    Mode: 'Balance' # TRN Balance Mode
+    MODE: 'Balance' # TRN Balance Mode
   SEM_SEG_HEAD:
     NAME: "MaskFormerHead"
     IGNORE_VALUE: 255
