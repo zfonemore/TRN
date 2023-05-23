@@ -14,7 +14,7 @@ To train a model with "train_net_video.py", first setup the corresponding datase
 Once these are set up, run:
 ```
 python train_net_video.py --num-gpus 8 \
-  --config-file configs/youtubevis_2019/trn_turbo_video_maskformer2_R50_bs32_8ep_frame.yaml
+  --config-file configs/youtubevis_2019/trn_balance_video_maskformer2_R50_bs32_8ep_frame.yaml
 ```
 
 If the COCO pre-trained weights are in other locations, then add `MODEL.WEIGHTS /path/to/pretrained_weights` at the end to point to their locations. In addition, the configs are made for 8-GPU training for ResNet-50 and 16-GPU training for Swin-L.
@@ -22,14 +22,14 @@ Since we use ADAMW optimizer, it is not clear how to scale learning rate with ba
 To train on 1 GPU, you need to figure out learning rate and batch size by yourself:
 ```
 python train_net_video.py \
-  --config-file configs/youtubevis_2019/video_maskformer2_R50_bs32_8ep_frame.yaml \
+  --config-file configs/youtubevis_2019/trn_turbo_video_maskformer2_R50_bs32_8ep_frame.yaml \
   --num-gpus 1 SOLVER.IMS_PER_BATCH SET_TO_SOME_REASONABLE_VALUE SOLVER.BASE_LR SET_TO_SOME_REASONABLE_VALUE
 ```
 
 To evaluate a model's performance, use
 ```
 python train_net_video.py \
-  --config-file configs/youtubevis_2019/video_maskformer2_R50_bs32_8ep_frame.yaml \
+  --config-file configs/youtubevis_2019/trn_balance_video_maskformer2_R50_bs32_8ep_frame.yaml \
   --eval-only MODEL.WEIGHTS /path/to/checkpoint_file
 ```
 For more options, see `python train_net_video.py -h`.
@@ -39,11 +39,11 @@ For more options, see `python train_net_video.py -h`.
 
 1. Pick a trained model and its config file. To start, you can pick from
   [model zoo](MODEL_ZOO.md),
-  for example, `configs/youtubevis_2019/video_maskformer2_R50_bs32_8ep_frame.yaml`.
+  for example, `configs/youtubevis_2019/trn_balance_video_maskformer2_R50_bs32_8ep_frame.yaml`.
 2. We provide `demo.py` to visualize outputs of a trained model. Run it with:
 ```
 cd demo_video/
-python demo.py --config-file ../configs/youtubevis_2019/video_maskformer2_R50_bs32_8ep_frame.yaml \
+python demo.py --config-file ../configs/youtubevis_2019/trn_balance_video_maskformer2_R50_bs32_8ep_frame.yaml \
   --input /path/to/video/frames \
   --output /output/folder \  
   [--other-options]
