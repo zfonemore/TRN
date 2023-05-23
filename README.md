@@ -1,7 +1,7 @@
 # Why look at every frame in Video Instance Segmentation
 
 <div align="center">
-  <img src=framework.png width="100%" height="100%"/>
+  <img src=framework.jpg width="100%" height="100%"/>
 </div>
 
 ### Features
