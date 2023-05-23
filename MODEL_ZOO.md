@@ -32,7 +32,7 @@ The numbers in this page are for the specific checkpoints and are different from
 <td align="center">200</td>
 <td align="center">44.1</td>
 <td align="center"><a href="configs/youtubevis_2019/trn_turbo_video_maskformer2_R50_bs32_8ep_frame.yaml">yaml</a></td>
-<td align="center"><a href="the same as TRN (B)">model</a></td>
+<td align="center">the same as TRN (B)</a></td>
 </tr>
 <!-- ROW: Swin-T -->
  <tr><td align="center">TRN (T)</td>
@@ -47,7 +47,7 @@ The numbers in this page are for the specific checkpoints and are different from
 <td align="center">151</td>
 <td align="center">47.4</td>
 <td align="center"><a href="configs/youtubevis_2019/swin/trn_balance_video_maskformer2_swin_tiny.yaml">yaml</a></td>
-<td align="center"><a href="the same as TRN (B)">model</a></td>
+<td align="center">the same as TRN (B)</a></td>
 </tr>
 
 </tbody></table>
