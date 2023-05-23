@@ -1,5 +1,9 @@
 # Why look at every frame in Video Instance Segmentation
 
+<div align="center">
+  <img src=framework.png width="100%" height="100%"/>
+</div>
+
 ### Features
 * Temporal Reduce Network to Speed up Video Instance Segmentation models.
 * Support major video instance segmentation datasets: YouTubeVIS 2019/2021, Occluded VIS (OVIS).

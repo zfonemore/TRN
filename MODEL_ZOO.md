@@ -46,7 +46,7 @@ The numbers in this page are for the specific checkpoints and are different from
 <td align="center">Swin-T</td>
 <td align="center">151</td>
 <td align="center">47.4</td>
-<td align="center"><a href="configs/youtubevis_2019/swin/trn_balance_video_maskformer2_swin_tiny.yaml">yaml</a></td>
+<td align="center"><a href="configs/youtubevis_2019/swin/trn_turbo_video_maskformer2_swin_tiny.yaml">yaml</a></td>
 <td align="center">the same as TRN (B)</a></td>
 </tr>
 
