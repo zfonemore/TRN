@@ -21,8 +21,8 @@ The numbers in this page are for the specific checkpoints and are different from
 <!-- ROW: R50 -->
  <tr><td align="center">MinVIS</td>
 <td align="center">R50</td>
-<td align="center">47.1</td>
 <td align="center">108</td>
+<td align="center">47.1</td>
 <td align="center"><a href="configs/youtubevis_2019/minvis_video_maskformer2_R50_bs32_8ep_frame.yaml">yaml</a></td>
 <td align="center">None</a></td>
 </tr>
@@ -43,8 +43,8 @@ The numbers in this page are for the specific checkpoints and are different from
 <!-- ROW: Swin-T -->
  <tr><td align="center">MinVIS</td>
 <td align="center">Swin-T</td>
-<td align="center">52.2</td>
 <td align="center">93</td>
+<td align="center">52.2</td>
 <td align="center"><a href="configs/youtubevis_2019/minvis_video_maskformer2_R50_bs32_8ep_frame.yaml">yaml</a></td>
 <td align="center">None</a></td>
 </tr>
