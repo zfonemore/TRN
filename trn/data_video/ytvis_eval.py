@@ -90,9 +90,6 @@ class YTVISEvaluator(DatasetEvaluator):
         self._metadata = MetadataCatalog.get(dataset_name)
 
         json_file = PathManager.get_local_path(self._metadata.json_file)
-        if '2019' in json_file:
-            _root = os.getenv("DETECTRON2_DATASETS", "datasets")
-            json_file = os.path.join(_root, 'ytvis_2019/instances_val_sub.json')
 
         with contextlib.redirect_stdout(io.StringIO()):
             self._ytvis_api = YTVOS(json_file)
