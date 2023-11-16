@@ -1,6 +1,5 @@
-_BASE_: ../video_maskformer2_R50_bs32_8ep_frame.yaml
+_BASE_: ../trnlite_minvis_R50_bs32_8ep.yaml
 MODEL:
-  META_ARCHITECTURE: "VideoMaskFormer_frame_mem"
   BACKBONE:
     NAME: "D2SwinTransformer"
   SWIN:
@@ -16,7 +15,13 @@ MODEL:
   PIXEL_MEAN: [123.675, 116.280, 103.530]
   PIXEL_STD: [58.395, 57.120, 57.375]
   MASK_FORMER:
-    TRANSFORMER_DECODER_NAME: "VideoMultiScaleMaskedTransformerDecoder_frame_mem"
     NUM_OBJECT_QUERIES: 200
 INPUT:
   MIN_SIZE_TEST: 480
+SOLVER:
+  BASE_LR: 0.00005
+  STEPS: (11000,)
+  MAX_ITER: 16000
+  IMS_PER_BATCH: 8 
+INPUT:
+  SAMPLING_FRAME_NUM: 2

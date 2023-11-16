@@ -1,7 +1,8 @@
 _BASE_: Base-YouTubeVIS-VideoInstanceSegmentation.yaml
 MODEL:
   WEIGHTS: "model_final_3c8ec9.pkl"
-  META_ARCHITECTURE: "VideoMaskFormer_frame_tarvis"
+  META_ARCHITECTURE: "VideoMaskFormer_frame"
+  MODE: 'TRN-Lite' # TRN Lite mode
   SEM_SEG_HEAD:
     NAME: "MaskFormerHead"
     IGNORE_VALUE: 255
@@ -17,7 +18,7 @@ MODEL:
     COMMON_STRIDE: 4
     TRANSFORMER_ENC_LAYERS: 6
   MASK_FORMER:
-    TRANSFORMER_DECODER_NAME: "VideoMultiScaleMaskedTransformerDecoder_frame_tarvis"
+    TRANSFORMER_DECODER_NAME: "VideoMultiScaleMaskedTransformerDecoder_frame"
     TRANSFORMER_IN_FEATURE: "multi_scale_pixel_decoder"
     DEEP_SUPERVISION: True
     NO_OBJECT_WEIGHT: 0.1
@@ -44,6 +45,6 @@ MODEL:
       OVERLAP_THRESHOLD: 0.8
       OBJECT_MASK_THRESHOLD: 0.8
 SOLVER:
-  IMS_PER_BATCH: 32
+  IMS_PER_BATCH: 16
 INPUT:
-  SAMPLING_FRAME_NUM: 1
+  SAMPLING_FRAME_NUM: 2

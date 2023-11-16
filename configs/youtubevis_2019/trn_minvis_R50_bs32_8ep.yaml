@@ -2,7 +2,7 @@ _BASE_: Base-YouTubeVIS-VideoInstanceSegmentation.yaml
 MODEL:
   WEIGHTS: "model_final_3c8ec9.pkl"
   META_ARCHITECTURE: "VideoMaskFormer_frame"
-  TRN_MODE: None # None means no TRN, using original MinVIS
+  MODE: 'TRN' # TRN mode 
   SEM_SEG_HEAD:
     NAME: "MaskFormerHead"
     IGNORE_VALUE: 255
@@ -45,6 +45,6 @@ MODEL:
       OVERLAP_THRESHOLD: 0.8
       OBJECT_MASK_THRESHOLD: 0.8
 SOLVER:
-  IMS_PER_BATCH: 32
+  IMS_PER_BATCH: 16
 INPUT:
-  SAMPLING_FRAME_NUM: 1
+  SAMPLING_FRAME_NUM: 2
