@@ -30,20 +30,6 @@ from scipy.optimize import linear_sum_assignment
 logger = logging.getLogger(__name__)
 
 
-def get_bounding_box(masks):
-    boxes = torch.zeros(masks.shape[0], 4, dtype=torch.float32)
-    x_any = torch.any(masks, dim=1)
-    y_any = torch.any(masks, dim=2)
-    for idx in range(masks.shape[0]):
-        x = torch.where(x_any[idx, :])[0]
-        y = torch.where(y_any[idx, :])[0]
-        if len(x) > 0 and len(y) > 0:
-            boxes[idx, :] = torch.as_tensor(
-	        [x[0], y[0], x[-1] + 1, y[-1] + 1], dtype=torch.float32
-            )
-    return boxes
-
-
 @META_ARCH_REGISTRY.register()
 class VideoMaskFormer_frame(nn.Module):
     """
@@ -68,7 +54,7 @@ class VideoMaskFormer_frame(nn.Module):
         # video
         num_frames,
         window_inference,
-        trn_mode,
+        mode,
     ):
         """
         Args:
@@ -112,7 +98,7 @@ class VideoMaskFormer_frame(nn.Module):
 
         self.num_frames = num_frames
         self.window_inference = window_inference
-        self.trn_mode = trn_mode
+        self.mode = mode
 
     @classmethod
     def from_config(cls, cfg):
@@ -173,7 +159,7 @@ class VideoMaskFormer_frame(nn.Module):
             # video
             "num_frames": cfg.INPUT.SAMPLING_FRAME_NUM,
             "window_inference": cfg.MODEL.MASK_FORMER.TEST.WINDOW_INFERENCE,
-            "trn_mode": cfg.MODEL.TRN_MODE
+            "mode": cfg.MODEL.MODE
         }
 
     @property
@@ -217,15 +203,15 @@ class VideoMaskFormer_frame(nn.Module):
             video_id = int(batched_inputs[0]['video_id']) - 1
             ious = torch.load('ytvis19_pred_ious.pth')
 
-            if self.trn_mode is None:
+            if self.mode is None:
                 gap = 1
-            elif self.trn_mode == 'Turbo':
+            elif self.mode == 'TRN-Lite':
                 gap = max(1, int(ious[video_id] ** 2 * 7))
-            elif self.trn_mode == 'Balance':
+            elif self.mode == 'TRN':
                 gap = max(1, int(ious[video_id] ** 2 * 3))
 
         else:
-            if self.trn_mode is None:
+            if self.mode is None:
                 gap = 1
             else:
                 gap = 2

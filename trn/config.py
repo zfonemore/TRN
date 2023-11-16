@@ -13,5 +13,5 @@ def add_trn_config(cfg):
     cfg.INPUT.SAMPLING_FRAME_RANGE = 2
     cfg.INPUT.SAMPLING_FRAME_RATIO = 1.0
     cfg.MODEL.MASK_FORMER.TEST.WINDOW_INFERENCE = False
-    cfg.MODEL.TRN_MODE = None
+    cfg.MODEL.MODE = None
 
