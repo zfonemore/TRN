@@ -178,6 +178,7 @@ class MSDeformAttnPixelDecoder(nn.Module):
         # deformable transformer encoder args
         transformer_in_features: List[str],
         common_stride: int,
+        mode = None,
     ):
         """
         NOTE: this interface is experimental.
@@ -291,18 +292,10 @@ class MSDeformAttnPixelDecoder(nn.Module):
         self.lateral_convs = lateral_convs[::-1]
         self.output_convs = output_convs[::-1]
 
-        '''
-        lateral_norm = get_norm(norm, conv_dim)
-
-        lateral_conv = Conv2d(
-            in_channels*2, conv_dim, kernel_size=1, bias=use_bias, norm=lateral_norm
-        )
-
-        weight_init.c2_xavier_fill(lateral_conv)
-        self.add_module("temporal_adapter_{}".format(1), lateral_conv)
-
-        self.temporal_lateral = lateral_conv
-        '''
+        if mode == 'TRN':
+            self.tfm = True
+        else:
+            self.tfm = False
 
 
     @classmethod
@@ -323,6 +316,7 @@ class MSDeformAttnPixelDecoder(nn.Module):
         ] = cfg.MODEL.SEM_SEG_HEAD.TRANSFORMER_ENC_LAYERS  # a separate config
         ret["transformer_in_features"] = cfg.MODEL.SEM_SEG_HEAD.DEFORMABLE_TRANSFORMER_ENCODER_IN_FEATURES
         ret["common_stride"] = cfg.MODEL.SEM_SEG_HEAD.COMMON_STRIDE
+        ret["mode"] = cfg.MODEL.MODE
         return ret
 
     @autocast(enabled=False)
@@ -338,7 +332,7 @@ class MSDeformAttnPixelDecoder(nn.Module):
         srcs = []
         pos = []
 
-        TFM = True
+        TFM = self.tfm
         # Reverse feature maps into top-down order (from low to high resolution)
         for idx, f in enumerate(self.transformer_in_features[::-1]):
             if TFM:

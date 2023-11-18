@@ -100,6 +100,13 @@ class VideoMaskFormer_frame(nn.Module):
         self.window_inference = window_inference
         self.mode = mode
 
+        if 'ytvis_2019' in metadata.name:
+            self.ious = torch.load('ytvis19_pred_ious.pth')
+        elif 'ytvis_2021' in metadata.name:
+            self.ious = torch.load('ytvis21_pred_ious.pth')
+        elif 'ovis' in metadata.name:
+            self.ious = torch.load('ovis_pred_ious.pth')
+
     @classmethod
     def from_config(cls, cfg):
         backbone = build_backbone(cfg)
@@ -201,14 +208,13 @@ class VideoMaskFormer_frame(nn.Module):
 
         if not self.training:
             video_id = int(batched_inputs[0]['video_id']) - 1
-            ious = torch.load('ytvis19_pred_ious.pth')
 
             if self.mode is None:
                 gap = 1
             elif self.mode == 'TRN-Lite':
-                gap = max(1, int(ious[video_id] ** 2 * 7))
+                gap = max(1, int(self.ious[video_id] ** 2 * 3))
             elif self.mode == 'TRN':
-                gap = max(1, int(ious[video_id] ** 2 * 3))
+                gap = max(1, int(self.ious[video_id] ** 2 * 3))
 
         else:
             if self.mode is None:
