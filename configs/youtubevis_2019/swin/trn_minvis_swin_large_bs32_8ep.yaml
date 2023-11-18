@@ -1,4 +1,4 @@
-_BASE_: ../trn_balance_video_maskformer2_R50_bs32_8ep_frame.yaml
+_BASE_: ../trn_minvis_R50_bs32_8ep.yaml
 MODEL:
   BACKBONE:
     NAME: "D2SwinTransformer"
