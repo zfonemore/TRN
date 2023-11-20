@@ -210,16 +210,18 @@ class VideoMaskFormer_frame(nn.Module):
             video_id = int(batched_inputs[0]['video_id']) - 1
 
             if self.mode is None:
+                # original MinVIS
                 gap = 1
-            elif self.mode == 'TRN-Lite':
-                gap = max(1, int(self.ious[video_id] ** 2 * 3))
-            elif self.mode == 'TRN':
+            else:
+                # with TRN
                 gap = max(1, int(self.ious[video_id] ** 2 * 3))
 
         else:
             if self.mode is None:
+                # original MinVIS
                 gap = 1
             else:
+                # with TRN
                 gap = 2
 
         if not self.training and self.window_inference:
@@ -250,7 +252,6 @@ class VideoMaskFormer_frame(nn.Module):
         else:
 
             outputs = self.post_processing(outputs, gap=gap, repeat_index=repeat_index)
-
 
             mask_cls_results = outputs["pred_logits"]
             mask_pred_results = outputs["pred_masks"]
@@ -304,6 +305,7 @@ class VideoMaskFormer_frame(nn.Module):
         pred_masks = einops.rearrange(pred_masks[0], 'q t h w -> t q h w')
         pred_embds = einops.rearrange(pred_embds[0], 'c t q -> t q c')
 
+        # share frames index for each key frame
         if repeat_index is None:
             bs = len(pred_masks)
             key_frame = torch.zeros(bs, dtype=torch.long)

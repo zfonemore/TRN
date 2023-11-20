@@ -293,8 +293,10 @@ class MSDeformAttnPixelDecoder(nn.Module):
         self.output_convs = output_convs[::-1]
 
         if mode == 'TRN':
+            # use tfm under TRN mode
             self.tfm = True
         else:
+            # disable tfm under TRN-Lite mode
             self.tfm = False
 
 
