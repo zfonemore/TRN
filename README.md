@@ -1,4 +1,5 @@
 # Why Look at Every Frame in Video Instance Segmentation
+This is the official implementation of TRN on MinVIS. 
 
 <div align="center">
   <img src=framework.jpg width="100%" height="100%"/>
